@@ -16,11 +16,13 @@ describe('Product Endpoints', () => {
     expect(res.statusCode).toEqual(401);
   });
 
-  it('should reject fetching a product with an invalid UUID format', async () => {
-    const res = await request(app)
-      .get('/api/products/invalid-uuid-123');
+  it('should require authentication to browse the marketplace', async () => {
+    const res = await request(app).get('/api/products');
+    expect(res.statusCode).toEqual(401);
+  });
 
-    // Expect 400 Bad Request or 404 Not Found depending on your route handling
-    expect([400, 404]).toContain(res.statusCode);
+  it('should require authentication to view individual product details', async () => {
+    const res = await request(app).get('/api/products/invalid-uuid-123');
+    expect(res.statusCode).toEqual(401);
   });
 });

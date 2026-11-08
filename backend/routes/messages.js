@@ -26,8 +26,8 @@ router.get('/', verifyToken, async (req, res) => {
         createdAt: true,
         readAt: true, // Used only to calculate the current recipient's unread state.
         product: { select: { id: true, title: true, price: true, category: true, sellerId: true } },
-        sender: { select: { id: true, fullName: true, email: true, role: true } },
-        receiver: { select: { id: true, fullName: true, email: true, role: true } },
+        sender: { select: { id: true, fullName: true, role: true } },
+        receiver: { select: { id: true, fullName: true, role: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -158,8 +158,8 @@ router.get('/:productId', verifyToken, async (req, res) => {
         content: true,
         createdAt: true,
         readAt: true,
-        sender: { select: { id: true, fullName: true, email: true } },
-        receiver: { select: { id: true, fullName: true, email: true } },
+        sender: { select: { id: true, fullName: true, role: true } },
+        receiver: { select: { id: true, fullName: true, role: true } },
       },
       orderBy: { createdAt: 'asc' },
     });

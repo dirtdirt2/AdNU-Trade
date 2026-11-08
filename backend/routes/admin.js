@@ -1,10 +1,10 @@
 const express = require('express');
-const path = require('path');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const { verifyToken } = require('../middleware/auth');
 const { createNotification } = require('../utils/notifications');
+const { getPaymentProofUrl } = require('../utils/cloudinaryProofs');
 
 const verifyAdmin = (req, res, next) => {
   if (req.user.role !== 'admin') {
@@ -374,14 +374,33 @@ router.get('/listing-payments/:paymentId/proof', async (req, res) => {
       where: { id: req.params.paymentId },
       select: { proofImage: true },
     });
-    if (!payment) return res.status(404).json({ error: 'Payment proof not found.' });
-    const proofPath = path.join(__dirname, '..', 'private-uploads', 'listing-payment-proofs', path.basename(payment.proofImage));
-    return res.sendFile(proofPath, (error) => {
-      if (error && !res.headersSent) res.status(error.statusCode || 404).json({ error: 'Payment proof file not found.' });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment proof not found.' });
+    }
+
+    const proofUrl = getPaymentProofUrl(payment.proofImage);
+    const cloudinaryResponse = await fetch(proofUrl);
+
+    if (!cloudinaryResponse.ok) {
+      console.error('Cloudinary proof retrieval failed:', cloudinaryResponse.status);
+      return res.status(502).json({ error: 'Could not retrieve payment proof.' });
+    }
+
+    const contentType = cloudinaryResponse.headers.get('content-type');
+
+    res.set({
+      'Content-Type': contentType || 'application/octet-stream',
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
     });
+
+    const fileBuffer = Buffer.from(await cloudinaryResponse.arrayBuffer());
+
+    return res.send(fileBuffer);
   } catch (error) {
     console.error('Error serving payment proof:', error);
-    res.status(500).json({ error: 'Could not open payment proof.' });
+    return res.status(500).json({ error: 'Could not open payment proof.' });
   }
 });
 

@@ -206,14 +206,14 @@ export function TransactionActions({ status, on, isSeller, meetupStatus }) {
       : [P("Confirm Purchase", on.buy), msg, cancel].filter(Boolean),
     pending: pendingActions.filter(Boolean),
     confirmed: isSeller
-      ? [P("Mark Item As Ready", on.meet)].filter(Boolean)
+      ? [P("Mark Item As Ready", on.meet), cancel].filter(Boolean)
       : [
           <div key="w" className="flex h-11 items-center justify-center rounded-xl bg-blue-50 text-xs font-semibold text-blue-900">Awaiting Seller to Mark Item As Ready</div>,
           msg, cancel
         ].filter(Boolean),
     ready: isSeller
-      ? [<div key="r" className="flex h-11 items-center justify-center rounded-xl bg-blue-50 text-xs font-semibold text-blue-900">Awaiting Buyer Item Receipt</div>]
-      : [P("Confirm Item Received & Paid", on.complete), msg].filter(Boolean),
+      ? [<div key="r" className="flex h-11 items-center justify-center rounded-xl bg-blue-50 text-xs font-semibold text-blue-900">Awaiting Buyer Item Receipt</div>, cancel]
+      : [P("Confirm Item Received & Paid", on.complete), msg, cancel].filter(Boolean),
     completed: isSeller ? [
       <div key="d" className="flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-50 text-sm font-semibold text-emerald-700"><CheckCircle2 size={18} /> Transaction Completed</div>
     ] : [
