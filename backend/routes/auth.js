@@ -1,4 +1,5 @@
 const express = require('express');
+const { randomInt } = require('crypto');
 const router = express.Router();
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
@@ -13,14 +14,23 @@ router.post('/register', async (req, res) => {
   try {
     const { idNumber, first, last, email, password, role } = req.body;
 
-    if (!email) {
+    if (typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ error: 'Email is required.' });
+    }
+    if (typeof first !== 'string' || !first.trim() || typeof last !== 'string' || !last.trim()) {
+      return res.status(400).json({ error: 'First name and last name are required.' });
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+    if (typeof idNumber !== 'string' || !/^\d{9}$/.test(idNumber)) {
+      return res.status(400).json({ error: 'Your university ID must contain exactly 9 digits.' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
 
     // Validate AdNU email domain
-    if (!normalizedEmail.endsWith('@adnu.edu.ph')) {
+    if (!/^[^\s@]+@adnu\.edu\.ph$/.test(normalizedEmail)) {
       return res.status(400).json({ error: 'Only @adnu.edu.ph emails are allowed.' });
     }
 
@@ -30,12 +40,18 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'This email is already registered and verified. Please sign in instead.' });
     }
 
-    // Determine role and approval status (Admins require manual approval)
-    const userRole = role === 'admin' ? 'admin' : (role || 'student');
-    const isApprovedStatus = userRole === 'admin' ? false : true;
+    // Only the account types supported by AdNU Trade may be registered.
+    const userRole = typeof role === 'string' && role.trim() ? role.trim().toLowerCase() : 'student';
+    const allowedRoles = new Set(['student', 'teacher', 'staff', 'admin']);
+    if (!allowedRoles.has(userRole)) {
+      return res.status(400).json({ error: 'Invalid account type.' });
+    }
 
-    // Generate random 6-digit OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Admin accounts require approval from an existing administrator.
+    const isApprovedStatus = userRole !== 'admin';
+
+    // Use a cryptographically secure generator for the six-digit verification code.
+    const otpCode = randomInt(100000, 1000000).toString();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
     // Send the email first
@@ -81,8 +97,8 @@ router.post('/register', async (req, res) => {
 router.post('/verify-otp', async (req, res) => {
   try {
     const { email, code } = req.body;
-    if (!email || !code) {
-      return res.status(400).json({ error: 'Email and code are required.' });
+    if (typeof email !== 'string' || !email.trim() || typeof code !== 'string' || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ error: 'A valid email and six-digit verification code are required.' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -113,7 +129,7 @@ router.post('/verify-otp', async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email is required.' });
+    if (typeof email !== 'string' || !email.trim()) return res.status(400).json({ error: 'Email is required.' });
 
     const normalizedEmail = email.trim().toLowerCase();
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -122,7 +138,7 @@ router.post('/forgot-password', async (req, res) => {
       return res.json({ message: 'If an account exists, a reset code was sent.' });
     }
 
-    const resetOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetOtp = randomInt(100000, 1000000).toString();
     const resetExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
     await prisma.user.update({
@@ -144,8 +160,8 @@ router.post('/reset-password', async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
 
-    if (!email || !code || !newPassword) {
-      return res.status(400).json({ error: 'All fields are required.' });
+    if (typeof email !== 'string' || !email.trim() || typeof code !== 'string' || !/^\d{6}$/.test(code) || typeof newPassword !== 'string') {
+      return res.status(400).json({ error: 'A valid email, six-digit reset code, and new password are required.' });
     }
 
     if (newPassword.length < 8) {
@@ -188,7 +204,7 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || !password) {
       return res.status(400).json({ error: 'Please provide email/ID and password.' });
     }
 
@@ -216,7 +232,15 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email or password.' });
     }
 
-    // 3. Check if admin account is approved by an existing admin
+    // 3. Email verification is required for every account type.
+    if (user.isVerified !== true) {
+      return res.status(403).json({
+        error: 'Please verify your AdNU email before signing in.',
+        code: 'EMAIL_NOT_VERIFIED',
+      });
+    }
+
+    // 4. Check if admin account is approved by an existing admin
     if (user.role === 'admin' && !user.isApproved) {
       return res.status(403).json({
         error: 'Your administrator account is pending approval from an existing admin.'
@@ -225,7 +249,7 @@ router.post('/login', async (req, res) => {
 
     // 4. Generate JWT token
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, fullName: user.fullName, idNumber: user.idNumber },
+      { userId: user.id, email: user.email, role: user.role, fullName: user.fullName, idNumber: user.idNumber, isVerified: true, isApproved: user.isApproved === true },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -249,40 +273,29 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// 6. DEV TOKEN GENERATOR
-router.get('/dev-token/:userId', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({ where: { id: req.params.userId } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, fullName: user.fullName, idNumber: user.idNumber },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    res.json({ token });
-  } catch (error) {
-    console.error('Error generating dev token:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // 7. GOOGLE AUTHENTICATION STRATEGY
-passport.use(new GoogleStrategy({
+// OAuth is optional during local development. Do not let blank credentials
+// prevent the entire backend from starting.
+const googleOAuthConfigured = Boolean(
+  process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim()
+);
+
+if (googleOAuthConfigured) {
+  passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "/api/auth/google/callback"
-  },
-  async (accessToken, refreshToken, profile, done) => {
+    callbackURL: '/api/auth/google/callback',
+  }, async (accessToken, refreshToken, profile, done) => {
     try {
-      const email = profile.emails[0].value.toLowerCase();
+      const emailRecord = profile.emails?.find((entry) => typeof entry.value === 'string');
+      const email = emailRecord?.value?.trim().toLowerCase();
+      const googleVerifiedEmail = profile._json?.email_verified === true || emailRecord?.verified === true;
 
-      if (!email.endsWith('@adnu.edu.ph')) {
-        return done(null, false, { message: 'Unauthorized domain. Only @adnu.edu.ph accounts are allowed.' });
+      if (!email || !email.endsWith('@adnu.edu.ph') || !googleVerifiedEmail) {
+        return done(null, false, { message: 'Use a Google-verified @adnu.edu.ph email address.' });
       }
 
       let user = await prisma.user.findUnique({ where: { email } });
-
       if (!user) {
         user = await prisma.user.create({
           data: {
@@ -290,8 +303,13 @@ passport.use(new GoogleStrategy({
             fullName: profile.displayName,
             role: 'student',
             isVerified: true,
-            isApproved: true
-          }
+            isApproved: true,
+          },
+        });
+      } else if (!user.isVerified) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { isVerified: true, otpCode: null, otpExpiresAt: null },
         });
       }
 
@@ -299,37 +317,51 @@ passport.use(new GoogleStrategy({
     } catch (error) {
       return done(error, null);
     }
-  }
-));
+  }));
 
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+  router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-router.get('/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: '/api/auth/login-failed' }),
-  (req, res) => {
-    if (req.user.role === 'admin' && !req.user.isApproved) {
-      return res.status(403).json({ error: 'Your administrator account is pending approval.' });
-    }
-
-    const token = jwt.sign(
-      { userId: req.user.id, email: req.user.email, role: req.user.role, fullName: req.user.fullName, idNumber: req.user.idNumber },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      message: 'Successfully authenticated with AdNU account!',
-      token,
-      user: {
-        id: req.user.id,
-        email: req.user.email,
-        fullName: req.user.fullName,
-        idNumber: req.user.idNumber,
-        role: req.user.role
+  router.get('/google/callback',
+    passport.authenticate('google', { session: false, failureRedirect: '/api/auth/login-failed' }),
+    (req, res) => {
+      if (req.user.role === 'admin' && !req.user.isApproved) {
+        return res.status(403).json({ error: 'Your administrator account is pending approval.' });
       }
-    });
-  }
-);
+
+      const token = jwt.sign(
+        {
+          userId: req.user.id,
+          email: req.user.email,
+          role: req.user.role,
+          fullName: req.user.fullName,
+          idNumber: req.user.idNumber,
+          isVerified: req.user.isVerified === true,
+          isApproved: req.user.isApproved === true,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      return res.json({
+        message: 'Successfully authenticated with AdNU account!',
+        token,
+        user: {
+          id: req.user.id,
+          email: req.user.email,
+          fullName: req.user.fullName,
+          idNumber: req.user.idNumber,
+          role: req.user.role,
+        },
+      });
+    }
+  );
+} else {
+  const googleOAuthUnavailable = (_req, res) => res.status(503).json({
+    error: 'Google sign-in is not configured on this server. Use email and password instead.',
+  });
+  router.get('/google', googleOAuthUnavailable);
+  router.get('/google/callback', googleOAuthUnavailable);
+}
 
 router.get('/login-failed', (req, res) => {
   res.status(403).json({ error: 'Authentication failed. Make sure you are using an official @adnu.edu.ph account.' });

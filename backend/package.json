@@ -1,6 +1,8 @@
 {
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "bcrypt": "^6.0.0",
+    "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.8",
     "express": "^5.3.0",
@@ -10,8 +12,7 @@
     "mysql2": "^3.24.6",
     "nodemailer": "^10.2.0",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0",
-    "@prisma/client": "^6.19.3"
+    "passport-google-oauth20": "^2.0.0"
   },
   "scripts": {
     "start": "node server.js",
@@ -22,5 +23,11 @@
     "jest": "^30.5.2",
     "prisma": "^6.19.3",
     "supertest": "^7.3.1"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true,
+    "bcrypt@6.0.0": true
   }
 }

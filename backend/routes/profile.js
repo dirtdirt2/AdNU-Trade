@@ -14,6 +14,7 @@ const publicUserSelect = {
   fullName: true,
   role: true,
   isVerified: true,
+  isApproved: true,
   createdAt: true,
 };
 
@@ -24,6 +25,8 @@ const issueToken = (user) => jwt.sign(
     role: user.role,
     fullName: user.fullName,
     idNumber: user.idNumber,
+    isVerified: user.isVerified === true,
+    isApproved: user.isApproved === true,
   },
   process.env.JWT_SECRET,
   { expiresIn: '7d' }
@@ -106,7 +109,7 @@ router.get('/favorites', verifyToken, async (req, res) => {
       where: { userId: req.user.userId },
       include: {
         product: {
-          include: { seller: { select: { id: true, fullName: true, email: true } } },
+          include: { seller: { select: { id: true, fullName: true, role: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },

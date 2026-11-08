@@ -296,32 +296,52 @@ export default function TransactionPage() {
 
   const qty = 1;
   const total = Number(item.price) * qty;
-  const locked = status === "completed" || status === "cancelled";
+  const locked = ["confirmed", "ready", "completed", "cancelled"].includes(status);
   const log = (text) => setEvents((e) => [...e, { at: new Date(), text }]);
 
-  const syncStatusToBackend = async (newStatus, logText) => {
-    setStatus(newStatus);
-    log(logText);
-
+  const syncStatusToBackend = async (newStatus, logText, extraPayload = {}) => {
     const activeTxId = localStorage.getItem('adnu_active_txId') || txId;
-    if (activeTxId && !activeTxId.includes('PENDING')) {
-      try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        await fetch(`${apiBaseUrl}/api/transactions/${activeTxId}/status`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ newStatus })
-        });
-      } catch (err) {
-        console.error("Failed to sync transaction status to backend:", err);
+
+    // Preserve the local preview-only behavior for an order that has not yet
+    // received a persisted transaction ID. Real transactions always sync first.
+    if (!activeTxId || activeTxId.includes('PENDING')) {
+      setStatus(newStatus);
+      log(logText);
+      return true;
+    }
+
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const response = await fetch(`${apiBaseUrl}/api/transactions/${activeTxId}/status`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ newStatus, ...extraPayload })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'The transaction could not be updated.');
       }
+
+      if (data.transaction) {
+        setTxRecord(data.transaction);
+        setStatus(data.transaction.status);
+      } else {
+        setStatus(newStatus);
+      }
+      log(logText);
+      return true;
+    } catch (err) {
+      console.error("Failed to sync transaction status to backend:", err);
+      alert(err.message || 'The transaction could not be updated. Please refresh and try again.');
+      await fetchTransactionDetails();
+      return false;
     }
   };
 
-  const go = (s, text) => { syncStatusToBackend(s, text); };
+  const go = (s, text, extraPayload) => syncStatusToBackend(s, text, extraPayload);
   const home = (v) => { window.location.hash = `#/${v}`; };
 
   const isFormComplete = Boolean(
@@ -535,7 +555,11 @@ export default function TransactionPage() {
               }
 
               setModal(null);
-              go("pending", "Purchase confirmed, awaiting seller agreement on campus meetup terms");
+              // The checkout endpoint already created the transaction as pending
+              // and reserved the product atomically. Do not send a second status
+              // request for the same pending state.
+              setStatus("pending");
+              log("Purchase confirmed, awaiting seller agreement on campus meetup terms");
             } catch (err) {
               console.error(err);
               alert("An error occurred during checkout.");
@@ -545,7 +569,7 @@ export default function TransactionPage() {
       )}
       {modal === "cancel" && (
         <CancellationModal onKeep={() => setModal(null)}
-          onConfirm={(r) => { setModal(null); go("cancelled", `Transaction cancelled${r ? ` (${r})` : ""}`); }} />
+          onConfirm={(r) => { setModal(null); go("cancelled", `Transaction cancelled${r ? ` (${r})` : ""}`, { cancelReason: r || '' }); }} />
       )}
 
       {modal === "meet" && (
