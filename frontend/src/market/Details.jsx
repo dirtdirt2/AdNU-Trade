@@ -1,3 +1,4 @@
+import { apiUrl, API_BASE_URL } from "../api.js";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Star, MessageCircle, HandCoins, ArrowLeft, Send, GraduationCap, ShoppingBag } from "lucide-react";
 import { NAVY, NAVY_LIGHT } from "../ui.jsx";
@@ -77,18 +78,11 @@ export function ProductDetails({ item: initialItem, onMessage, onBuy, onClose })
       const base64Payload = token.split('.')[1];
       const payload = JSON.parse(atob(base64Payload));
       const currentUserId = payload.userId || payload.id;
-      const currentUserEmail = payload.email;
-      const currentUserName = payload.fullName || payload.name;
-
       const sellerId = item.sellerId || item.userId || item.seller?.id;
-      const sellerEmail = item.seller?.email;
-      const sellerName = typeof item.seller === 'string' ? item.seller : item.seller?.fullName;
 
-      if (
-        (sellerId && currentUserId && String(sellerId) === String(currentUserId)) ||
-        (sellerEmail && currentUserEmail && sellerEmail === currentUserEmail) ||
-        (sellerName && currentUserName && sellerName.trim().toLowerCase() === currentUserName.trim().toLowerCase())
-      ) {
+      // The seller's database ID is authoritative. Names and email addresses
+      // must not be used as an ownership check because they are not unique.
+      if (sellerId && currentUserId && String(sellerId) === String(currentUserId)) {
         isMyProduct = true;
       }
     }
@@ -200,7 +194,7 @@ export function ProductDetails({ item: initialItem, onMessage, onBuy, onClose })
   );
 }
 
-const apiBaseUrl = "http://localhost:5000";
+const apiBaseUrl = API_BASE_URL;
 
 const parseJwt = (token) => {
   try {

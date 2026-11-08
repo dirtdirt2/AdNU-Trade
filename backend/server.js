@@ -3,18 +3,35 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { PrismaClient } = require('@prisma/client');
-const jwt = require('jsonwebtoken');
-
-const prisma = new PrismaClient();
+const passport = require('passport');
+const multer = require('multer');
 const app = express();
 
 // 1. Global Middleware (Must come AFTER app is initialized)
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Not allowed by CORS'));
+  },
+}));
+
+app.use(express.json({ limit: '1mb' }));
+app.use(passport.initialize());
 
 // 2. Static Folders
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  fallthrough: false,
+  index: false,
+  dotfiles: 'deny',
+}));
 
 // 3. Import & Mount Routes
 const adminRoutes = require('./routes/admin');
@@ -37,32 +54,32 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/listing-payments', listingPaymentRoutes);
-app.use('/uploads', express.static('uploads'));
 
 // Test Route
 app.get('/', (req, res) => {
   res.json({ message: 'AdNU Trade Backend is running successfully!' });
 });
 
-// TEMP DEV ROUTE: Generate a token for any user ID for Postman testing
-app.get('/api/auth/dev-token/:userId', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({ where: { id: req.params.userId } });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found in database.' });
-    }
+// Return safe, consistent errors for upload middleware and unexpected route failures.
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
 
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, fullName: user.fullName, idNumber: user.idNumber },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({ message: 'Dev token generated successfully', token });
-  } catch (error) {
-    console.error('Error generating dev token:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  if (error instanceof multer.MulterError) {
+    const message = error.code === 'LIMIT_FILE_SIZE'
+      ? 'Each image must be 5 MB or smaller.'
+      : error.code === 'LIMIT_FILE_COUNT' || error.code === 'LIMIT_UNEXPECTED_FILE'
+        ? 'You can upload up to 5 images per request.'
+        : 'The uploaded files could not be processed.';
+    return res.status(400).json({ error: message });
   }
+
+  const statusCode = error.statusCode || error.status;
+  if (statusCode && statusCode >= 400 && statusCode < 500) {
+    return res.status(statusCode).json({ error: error.message || 'The request could not be processed.' });
+  }
+
+  console.error('Unhandled request error:', error);
+  return res.status(500).json({ error: 'Internal server error.' });
 });
 
 // Only start the server if we are NOT running inside a Jest test

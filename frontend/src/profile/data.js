@@ -1,3 +1,4 @@
+import { apiUrl } from "../api.js";
 // Helpers shared by the profile and navigation components. Account data is
 // fetched from the authenticated API; the token is only a session fallback.
 export const readTokenPayload = () => {
@@ -64,7 +65,7 @@ export const apiRequest = async (path, options = {}) => {
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
   const headers = { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(`http://localhost:5000${path}`, { ...options, headers });
+  const response = await fetch(apiUrl(path), { ...options, headers });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
   return data;

@@ -24,3 +24,16 @@ describe('Private message unread state', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+
+describe('Message participant privacy', () => {
+  it('does not select participant email addresses or university ID numbers', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const routeSource = fs.readFileSync(path.join(__dirname, '../routes/messages.js'), 'utf8');
+
+    expect(routeSource).not.toMatch(/sender:\s*\{\s*select:\s*\{[^}]*email\s*:/s);
+    expect(routeSource).not.toMatch(/receiver:\s*\{\s*select:\s*\{[^}]*email\s*:/s);
+    expect(routeSource).not.toMatch(/idNumber\s*:/);
+  });
+});
