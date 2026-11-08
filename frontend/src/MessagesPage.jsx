@@ -1,3 +1,4 @@
+import { apiUrl, API_BASE_URL } from "./api.js";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { MessageCircle } from "lucide-react";
 import { Navbar, EmptyState } from "./market/components.jsx";
@@ -12,7 +13,7 @@ import {
   ProfileModal
 } from "./messages/components.jsx";
 
-const apiBaseUrl = "http://localhost:5000";
+const apiBaseUrl = API_BASE_URL;
 
 const parseJwt = (token) => {
   try {

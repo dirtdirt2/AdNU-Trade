@@ -1,3 +1,4 @@
+import { apiUrl, API_BASE_URL } from "../api.js";
 import { useState } from "react";
 import {
   Copy, Check, ArrowLeft, Star, MessageCircle, ShieldCheck, Flag, Pencil, Users,
@@ -8,7 +9,7 @@ import { Package } from "lucide-react";
 import { peso } from "../market/data.js";
 import { CatIcon } from "../market/components.jsx";
 
-const apiBaseUrl = "http://localhost:5000";
+const apiBaseUrl = API_BASE_URL;
 
 const soft = { color: NAVY_LIGHT, background: "#2b47a30f" };
 const ring = "focus:outline-none focus-visible:ring-4 focus-visible:ring-[#2b47a3]/20";

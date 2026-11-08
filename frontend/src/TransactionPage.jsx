@@ -1,3 +1,4 @@
+import { apiUrl, API_BASE_URL } from "./api.js";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { Navbar, BottomNav } from "./market/components.jsx";
 import { MessageSeller } from "./market/Details.jsx";
@@ -73,7 +74,7 @@ export default function TransactionPage() {
   const [chat, setChat] = useState(false);
   const [query, setQuery] = useState("");
 
-  const apiBaseUrl = 'http://localhost:5000';
+  const apiBaseUrl = API_BASE_URL;
 
   const parseJwt = (token) => {
     try {

@@ -1,3 +1,4 @@
+import { apiUrl } from "./api.js";
 import { useState } from "react";
 import {
   GraduationCap, BookOpen, Briefcase, User, Mail, Lock, Eye, EyeOff,
@@ -97,7 +98,7 @@ export default function RegisterPage({ onSwitchToLogin }) {
     setErrors({});
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/register", {
+      const res = await fetch(apiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...f, role }),
@@ -121,7 +122,7 @@ export default function RegisterPage({ onSwitchToLogin }) {
     setCodeError("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/verify-otp", {
+      const res = await fetch(apiUrl("/api/auth/verify-otp"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: f.email, code }),
@@ -141,7 +142,7 @@ export default function RegisterPage({ onSwitchToLogin }) {
     setResent(true);
     setCodeError("");
     try {
-      await fetch("http://localhost:5000/api/auth/register", {
+      await fetch(apiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...f, role }),

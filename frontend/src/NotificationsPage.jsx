@@ -1,3 +1,4 @@
+import { apiUrl, API_BASE_URL } from "./api.js";
 import { useCallback, useEffect, useState } from "react";
 import {
   Bell, CheckCheck, Package, CheckCircle2, XCircle, Wallet, ShoppingBag,
@@ -5,7 +6,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "./market/components.jsx";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = API_BASE_URL;
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token");
 const go = (hash) => { window.location.hash = hash; };
 
