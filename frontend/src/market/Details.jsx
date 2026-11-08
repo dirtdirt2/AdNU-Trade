@@ -1,3 +1,4 @@
+import { apiUrl, API_BASE_URL } from "../api.js";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Star, MessageCircle, HandCoins, ArrowLeft, Send, GraduationCap, ShoppingBag } from "lucide-react";
 import { NAVY, NAVY_LIGHT } from "../ui.jsx";
@@ -193,7 +194,7 @@ export function ProductDetails({ item: initialItem, onMessage, onBuy, onClose })
   );
 }
 
-const apiBaseUrl = "http://localhost:5000";
+const apiBaseUrl = API_BASE_URL;
 
 const parseJwt = (token) => {
   try {

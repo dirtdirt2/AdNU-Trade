@@ -1,3 +1,4 @@
+import { apiUrl, API_BASE_URL } from "./api.js";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, SlidersHorizontal, ClipboardList, MessageCircle, User, Package } from "lucide-react";
 import { NAVY_LIGHT } from "./ui.jsx";
@@ -88,7 +89,7 @@ export default function HomePage() {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (!token) return () => { active = false; };
 
-    fetch('http://localhost:5000/api/profile/favorites', {
+    fetch(apiUrl("/api/profile/favorites"), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (response) => {
@@ -126,7 +127,7 @@ export default function HomePage() {
         const token = localStorage.getItem('token') || sessionStorage.getItem('token');
 
         if (view === 'transactions') {
-          const res = await fetch('http://localhost:5000/api/transactions', {
+          const res = await fetch(apiUrl("/api/transactions"), {
             headers: token ? { 'Authorization': `Bearer ${token}` } : {}
           });
           if (res.ok) {
@@ -134,9 +135,9 @@ export default function HomePage() {
             setTransactions(data);
           }
         } else if (["home", "listings"].includes(view)) {
-          let url = 'http://localhost:5000/api/products';
+          let url = apiUrl("/api/products");
           if (view === 'listings') {
-            url = 'http://localhost:5000/api/products/my-listings';
+            url = apiUrl("/api/products/my-listings");
           }
 
           const res = await fetch(url, {
@@ -192,7 +193,7 @@ export default function HomePage() {
 
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/profile/favorites/${id}`, {
+      const response = await fetch(apiUrl(`/api/profile/favorites/${id}`), {
         method: wasSaved ? 'DELETE' : 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -210,7 +211,7 @@ export default function HomePage() {
 
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`http://localhost:5000/api/products/${productId}`, {
+      const res = await fetch(apiUrl(`/api/products/${productId}`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -259,7 +260,7 @@ export default function HomePage() {
     if (!confirm("Accept this listing fee? Your product will remain private until you submit payment and an admin verifies it.")) return;
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`http://localhost:5000/api/products/${productId}/fee-response`, {
+      const res = await fetch(apiUrl(`/api/products/${productId}/fee-response`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ action: 'accept' })
@@ -290,7 +291,7 @@ export default function HomePage() {
     setPaymentError("");
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`http://localhost:5000/api/products/${counterListing.id}/fee-response`, {
+      const res = await fetch(apiUrl(`/api/products/${counterListing.id}/fee-response`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ action: 'counter', counterOfferAmount: Number(counterAmount), message: counterMessage })
@@ -317,7 +318,7 @@ export default function HomePage() {
     setPaymentForm({ walletProvider: "", senderName: "", referenceNumber: "", proof: null });
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`http://localhost:5000/api/listing-payments/${item.id}/instructions`, {
+      const res = await fetch(apiUrl(`/api/listing-payments/${item.id}/instructions`), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -344,7 +345,7 @@ export default function HomePage() {
       body.append('senderName', paymentForm.senderName);
       body.append('referenceNumber', paymentForm.referenceNumber);
       body.append('proof', paymentForm.proof);
-      const res = await fetch(`http://localhost:5000/api/listing-payments/${paymentListing.id}`, {
+      const res = await fetch(apiUrl(`/api/listing-payments/${paymentListing.id}`), {
         method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body
       });
       const data = await res.json();
@@ -509,7 +510,7 @@ export default function HomePage() {
           onAdd={async (formData) => {
             try {
               const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-              const res = await fetch('http://localhost:5000/api/products', {
+              const res = await fetch(apiUrl("/api/products"), {
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${token}`

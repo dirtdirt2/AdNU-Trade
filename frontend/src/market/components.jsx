@@ -1,3 +1,4 @@
+import { apiUrl } from "../api.js";
 import { useEffect, useState } from "react";
 import {
   Search, MessageCircle, Bell, ChevronDown, Heart, Home, Store, ClipboardList, Bookmark, User,
@@ -70,8 +71,8 @@ export function Navbar({ query, setQuery, onNav, profileActive = false, msgActiv
       }
       const headers = { Authorization: `Bearer ${token}` };
       const [messageResult, notificationResult] = await Promise.allSettled([
-        fetch("http://localhost:5000/api/messages/unread-count", { headers, cache: "no-store" }),
-        fetch("http://localhost:5000/api/notifications/unread-count", { headers, cache: "no-store" }),
+        fetch(apiUrl("/api/messages/unread-count"), { headers, cache: "no-store" }),
+        fetch(apiUrl("/api/notifications/unread-count"), { headers, cache: "no-store" }),
       ]);
       if (!active) return;
       if (messageResult.status === "fulfilled" && messageResult.value.ok) {

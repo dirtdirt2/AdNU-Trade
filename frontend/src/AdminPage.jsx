@@ -1,3 +1,4 @@
+import { apiUrl, API_BASE_URL } from "./api.js";
 import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
@@ -50,7 +51,7 @@ export default function AdminPage({ onLogout }) {
   const [proposedFee, setProposedFee] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
 
-  const apiBaseUrl = 'http://localhost:5000';
+  const apiBaseUrl = API_BASE_URL;
 
   // Admins use a custom dashboard header, so load the same private unread
   // counts used by the shared navigation bar.
