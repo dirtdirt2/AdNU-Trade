@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(uuid())
+  idNumber       String?   @unique @map("id_number") // 9-digit ID Number (Students, Teachers, Staff)
+  email          String    @unique
+  password       String?
+  fullName       String    @map("full_name")
+  role           String    @default("student") // student, teacher, staff, admin
+  isVerified     Boolean   @default(false) @map("is_verified")
+  isApproved     Boolean   @default(true) @map("is_approved")
+  otpCode        String?   @map("otp_code")
+  otpExpiresAt   DateTime? @map("otp_expires_at")
+
+  // Password Reset Fields
+  resetOtp       String?   @map("reset_otp")
+  resetExpiresAt DateTime? @map("reset_expires_at")
+
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  products         Product[]
+  listingFees      ListingFee[]
+  submittedListingPayments ListingPayment[] @relation("ListingPaymentSeller")
+  reviewedListingPayments ListingPayment[] @relation("ListingPaymentReviewer")
+
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  notifications    Notification[]
+
+  buyerTransactions   Transaction[] @relation("BuyerTransactions")
+  sellerTransactions  Transaction[] @relation("SellerTransactions")
+  favorites           Favorite[]
+
+  @@map("users")
+}
+
+model Product {
+  id          String       @id @default(uuid())
+  sellerId    String       @map("seller_id")
+  seller      User         @relation(fields: [sellerId], references: [id])
+  title       String
+  description String       @db.Text
+  price       Decimal      @db.Decimal(10, 2)
+  category    String
+  condition   String       @default("Good")
+  images      Json         // Stored as a JSON array of image URLs
+  status      String       @default("pending_review") // pending_review, fee_proposed, negotiating, awaiting_payment, payment_submitted, approved, paused, reserved, rejected, sold
+  listingFeeWaived Boolean      @default(false) @map("listing_fee_waived")
+  rejectionReason String?  @map("rejection_reason") @db.Text
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  listingFees         ListingFee[]
+  listingPayments     ListingPayment[]
+  messages            Message[]
+  transactions        Transaction[]
+  favorites           Favorite[]
+
+  @@map("products")
+}
+
+model ListingFee {
+  id          String   @id @default(uuid())
+  productId   String   @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  adminId     String   @map("admin_id")
+  admin       User     @relation(fields: [adminId], references: [id])
+  proposedFee Decimal  @map("proposed_fee") @db.Decimal(10, 2)
+  proposedBy  String   @map("proposed_by") // admin or seller
+  status      String   @default("pending") // pending, accepted, countered, rejected, waived
+  message     String?  @db.Text
+  payments    ListingPayment[]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("listing_fees")
+}
+
+
+model ListingPayment {
+  id              String   @id @default(uuid())
+  productId       String   @map("product_id")
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  listingFeeId    String   @map("listing_fee_id")
+  listingFee      ListingFee @relation(fields: [listingFeeId], references: [id], onDelete: Cascade)
+  sellerId        String   @map("seller_id")
+  seller          User     @relation("ListingPaymentSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  reviewedById    String?  @map("reviewed_by_id")
+  reviewer        User?    @relation("ListingPaymentReviewer", fields: [reviewedById], references: [id])
+  amount          Decimal  @db.Decimal(10, 2)
+  walletProvider  String   @map("wallet_provider")
+  senderName      String?  @map("sender_name")
+  referenceNumber String   @map("reference_number")
+  proofImage      String   @map("proof_image")
+  status          String   @default("submitted") // submitted, verified, rejected
+  reviewNote      String?  @map("review_note") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  reviewedAt      DateTime? @map("reviewed_at")
+
+  @@index([productId])
+  @@index([sellerId])
+  @@index([status, createdAt])
+  @@map("listing_payments")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  productId  String   @map("product_id")
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  senderId   String   @map("sender_id")
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String   @map("receiver_id")
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  content    String   @db.Text
+  readAt     DateTime? @map("read_at") // Private recipient-side unread tracking; never exposed as a sender read receipt.
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([receiverId, readAt])
+  @@map("messages")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @default("general")
+  title     String
+  body      String   @db.Text
+  link      String?
+  entityId  String?  @map("entity_id")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model Transaction {
+  id                String   @id @default(uuid())
+  trackingCode      String   @unique @map("tracking_code")
+  productId         String   @map("product_id")
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyerId           String   @map("buyer_id")
+  buyer             User     @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId          String   @map("seller_id")
+  seller            User     @relation("SellerTransactions", fields: [sellerId], references: [id])
+
+  status            String   @default("placed") // placed, pending, confirmed, ready, completed, cancelled
+
+  // Payment Details
+  paymentMethod     String   @default("cash_on_meetup") @map("payment_method")
+  paymentStatus     String   @default("unpaid") @map("payment_status") // unpaid, paid
+
+  // Campus Meetup Fields
+  fulfillmentMethod String   @default("meetup") @map("fulfillment_method")
+  location          String?  @map("location")
+  meetupDate        String?  @map("meetup_date")
+  meetupTime        String?  @map("meetup_time")
+  meetupStatus      String   @default("pending_agreement") @map("meetup_status")
+
+  // Cancellation Tracking
+  cancelledBy       String?  @map("cancelled_by")
+  cancelReason      String?  @map("cancel_reason") @db.Text
+
+  totalPrice        Decimal  @map("total_price") @db.Decimal(10, 2)
+
+  // Persistent timestamps for history tracking
+  createdAt         DateTime  @default(now()) @map("created_at")
+  agreedAt          DateTime? @map("agreed_at")
+  readyAt           DateTime? @map("ready_at")
+  completedAt       DateTime? @map("completed_at")
+  cancelledAt       DateTime? @map("cancelled_at")
+
+  @@map("transactions")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String   @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, productId])
+  @@index([userId, createdAt])
+  @@map("favorites")
+}
+
+model AppSetting {
+  key       String   @id
+  value     Boolean  @default(false)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
