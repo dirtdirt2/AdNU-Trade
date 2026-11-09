@@ -1,31 +1,83 @@
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS
-  }
-});
-
 async function sendOtpEmail(toEmail, otp) {
-  const mailOptions = {
-    from: `"AdNU Trade Support" <${process.env.MAIL_USER}>`, // Matches your actual login user
-    to: toEmail,
-    subject: 'Your AdNU Trade Verification Code',
-    html: `
-      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 500px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px;">
-        <h2 style="color: #2b47a3; text-align: center;">Ateneo de Naga University Trade</h2>
-        <p>Thank you for registering. Use the verification code below to complete your account setup:</p>
-        <div style="text-align: center; margin: 24px 0;">
-          <span style="background: #f1f5f9; padding: 12px 24px; font-size: 28px; font-weight: bold; letter-spacing: 6px; color: #2b47a3; border-radius: 8px; display: inline-block;">${otp}</span>
-        </div>
-        <p style="font-size: 13px; color: #64748b; text-align: center;">This code will expire in 10 minutes. If you did not request this, please ignore this email.</p>
-      </div>
-    `
-  };
+  const relayUrl = process.env.EMAIL_RELAY_URL;
+  const relaySecret = process.env.EMAIL_RELAY_SECRET;
 
-  await transporter.sendMail(mailOptions);
+  if (!relayUrl || !relaySecret) {
+    throw new Error('Email relay configuration is missing.');
+  }
+
+  if (typeof toEmail !== 'string' || !toEmail.trim()) {
+    throw new Error('A valid recipient email address is required.');
+  }
+
+  const otpCode = String(otp);
+
+  if (!/^\d{6}$/.test(otpCode)) {
+    throw new Error('A valid six-digit OTP is required.');
+  }
+
+  let parsedUrl;
+
+  try {
+    parsedUrl = new URL(relayUrl);
+  } catch {
+    throw new Error('EMAIL_RELAY_URL is invalid.');
+  }
+
+  if (
+    parsedUrl.protocol !== 'https:' ||
+    parsedUrl.hostname !== 'script.google.com'
+  ) {
+    throw new Error('EMAIL_RELAY_URL must be a Google Apps Script HTTPS URL.');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+
+  let response;
+
+  try {
+    response = await fetch(relayUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        secret: relaySecret,
+        to: toEmail.trim(),
+        otp: otpCode
+      }),
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Email relay connection timed out.');
+    }
+
+    throw new Error(`Could not connect to email relay: ${error.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const responseText = await response.text();
+  let result = {};
+
+  if (responseText) {
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      throw new Error('Email relay returned an invalid response.');
+    }
+  }
+
+  if (!response.ok || result.ok !== true) {
+    throw new Error(
+      result.error || `Email relay request failed (${response.status}).`
+    );
+  }
+
+  return result;
 }
 
 module.exports = { sendOtpEmail };
