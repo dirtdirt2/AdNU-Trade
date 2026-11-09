@@ -9,23 +9,84 @@ const { validateUploadedImages, cleanupUploadedFiles } = require('../middleware/
 const path = require('path');
 const { createNotification, notifyAdmins } = require('../utils/notifications');
 const { ACTIVE_TRANSACTION_STATUSES, isValidMeetupDate, isValidMeetupTime } = require('../utils/transactionRules');
+const cloudinary = require('../config/cloudinary');
+
+async function deleteCloudinaryImages(assets = []) {
+  await Promise.all(
+    assets
+      .filter(asset => asset?.public_id)
+      .map(asset =>
+        cloudinary.uploader.destroy(asset.public_id, {
+          resource_type: 'image',
+        }).catch(error => {
+          console.error(
+            'Failed to delete Cloudinary image:',
+            error.message
+          );
+        })
+      )
+  );
+}
+
+async function uploadProductImages(files = []) {
+  const uploadedAssets = [];
+
+  try {
+    for (const file of files) {
+      const result = await cloudinary.uploader.upload(file.path, {
+        resource_type: 'image',
+        folder: 'adnu-trade/products',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+      });
+
+      if (!result.secure_url || !result.public_id) {
+        throw new Error('Cloudinary did not return a valid image URL.');
+      }
+
+      uploadedAssets.push(result);
+    }
+
+    return uploadedAssets;
+  } catch (error) {
+    await deleteCloudinaryImages(uploadedAssets);
+    throw error;
+  }
+}
+
 
 // 1. CREATE A PRODUCT LISTING. The admin sets the listing fee after reviewing it.
 router.post('/', verifyToken, upload.array('images', 5), async (req, res) => {
+  let uploadedAssets = [];
+
   try {
     await validateUploadedImages(req.files);
+
     const { title, description, price, category, condition } = req.body;
     const sellerId = req.user.userId;
     const numericPrice = Number(price);
 
-    if (!title?.trim() || !Number.isSafeInteger(numericPrice) || numericPrice < 1 || numericPrice > 99999999 || !category) {
-      await cleanupUploadedFiles(req.files);
-      return res.status(400).json({ error: 'A title, a whole-number price from ₱1 to ₱99,999,999, and a category are required.' });
+    if (
+      !title?.trim() ||
+      !Number.isSafeInteger(numericPrice) ||
+      numericPrice < 1 ||
+      numericPrice > 99999999 ||
+      !category
+    ) {
+      return res.status(400).json({
+        error: 'A title, a whole-number price from ₱1 to ₱99,999,999, and a category are required.',
+      });
     }
 
-    const feeFreeSetting = await prisma.appSetting.findUnique({ where: { key: 'free_listings_enabled' } });
+    const feeFreeSetting = await prisma.appSetting.findUnique({
+      where: { key: 'free_listings_enabled' },
+    });
+
     const freeListingsEnabled = Boolean(feeFreeSetting?.value);
-    const imagePaths = req.files ? req.files.map(file => `http://localhost:5000/uploads/${file.filename}`) : [];
+
+    // Upload temporary files to Cloudinary and save permanent HTTPS URLs.
+    uploadedAssets = await uploadProductImages(req.files || []);
+    const imagePaths = uploadedAssets.map(asset => asset.secure_url);
+
     const product = await prisma.$transaction(async (tx) => {
       const createdProduct = await tx.product.create({
         data: {
@@ -39,8 +100,13 @@ router.post('/', verifyToken, upload.array('images', 5), async (req, res) => {
           status: 'pending_review',
           listingFeeWaived: freeListingsEnabled,
         },
-        include: { seller: { select: { id: true, fullName: true, role: true } } },
+        include: {
+          seller: {
+            select: { id: true, fullName: true, role: true },
+          },
+        },
       });
+
       await notifyAdmins(tx, {
         type: 'listing_created',
         title: 'New listing awaiting review',
@@ -48,21 +114,34 @@ router.post('/', verifyToken, upload.array('images', 5), async (req, res) => {
         link: '#/admin',
         entityId: createdProduct.id,
       });
+
       return createdProduct;
     });
 
-    res.status(201).json({
+    // Cloudinary images now belong to the successfully saved product.
+    uploadedAssets = [];
+
+    return res.status(201).json({
       message: freeListingsEnabled
         ? 'Product submitted. An admin will review and approve it. No listing fee or e-wallet payment is required while fee-free mode is enabled.'
         : 'Product submitted. An admin will review it and propose a listing fee.',
       product,
     });
   } catch (error) {
-    await cleanupUploadedFiles(req.files);
+    await deleteCloudinaryImages(uploadedAssets);
+
     console.error('Error creating product listing:', error);
-    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Could not create product listing.' });
+
+    return res.status(error.statusCode || 500).json({
+      error: error.statusCode
+        ? error.message
+        : 'Could not create product listing.',
+    });
+  } finally {
+    await cleanupUploadedFiles(req.files || []);
   }
 });
+
 
 // 2. GET ALL PUBLIC / APPROVED PRODUCTS (Marketplace Browsing)
 router.get('/', verifyToken, async (req, res) => {
@@ -455,41 +534,61 @@ router.post('/:id/buy', verifyToken, async (req, res) => {
   }
 });
 
+
 // 7. EDIT AN EXISTING PRODUCT (Owner check enforced)
 router.put('/:id', verifyToken, upload.array('images', 5), async (req, res) => {
+  let uploadedAssets = [];
+
   try {
     await validateUploadedImages(req.files);
+
     const productId = req.params.id;
     const userId = req.user.userId;
     const { title, description, price, category, condition } = req.body;
 
-    const product = await prisma.product.findUnique({ where: { id: productId } });
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+    });
+
     if (!product) {
-      await cleanupUploadedFiles(req.files);
       return res.status(404).json({ error: 'Product not found.' });
     }
 
     if (product.sellerId !== userId) {
-      await cleanupUploadedFiles(req.files);
-      return res.status(403).json({ error: 'Unauthorized: You can only edit your own listings.' });
+      return res.status(403).json({
+        error: 'Unauthorized: You can only edit your own listings.',
+      });
     }
+
     if (['reserved', 'sold'].includes(product.status)) {
-      await cleanupUploadedFiles(req.files);
-      return res.status(409).json({ error: 'This listing cannot be edited while it is reserved or sold.' });
+      return res.status(409).json({
+        error: 'This listing cannot be edited while it is reserved or sold.',
+      });
     }
 
     let numericPrice;
+
     if (price !== undefined) {
       numericPrice = Number(price);
-      if (!Number.isSafeInteger(numericPrice) || numericPrice < 1 || numericPrice > 99999999) {
-        await cleanupUploadedFiles(req.files);
-        return res.status(400).json({ error: 'Product price must be a whole number from ₱1 to ₱99,999,999. Decimals, zero, and negative amounts are not allowed.' });
+
+      if (
+        !Number.isSafeInteger(numericPrice) ||
+        numericPrice < 1 ||
+        numericPrice > 99999999
+      ) {
+        return res.status(400).json({
+          error: 'Product price must be a whole number from ₱1 to ₱99,999,999. Decimals, zero, and negative amounts are not allowed.',
+        });
       }
     }
 
-    const newImagePaths = req.files && req.files.length > 0
-      ? req.files.map(file => `http://localhost:5000/uploads/${file.filename}`)
-      : undefined;
+    // Upload replacement images to Cloudinary when provided.
+    let newImagePaths;
+
+    if (req.files && req.files.length > 0) {
+      uploadedAssets = await uploadProductImages(req.files);
+      newImagePaths = uploadedAssets.map(asset => asset.secure_url);
+    }
 
     const updatedProduct = await prisma.product.update({
       where: { id: productId },
@@ -503,13 +602,28 @@ router.put('/:id', verifyToken, upload.array('images', 5), async (req, res) => {
       },
     });
 
-    res.json({ message: 'Product updated successfully.', product: updatedProduct });
+    // Keep the uploaded Cloudinary assets after the database update succeeds.
+    uploadedAssets = [];
+
+    return res.json({
+      message: 'Product updated successfully.',
+      product: updatedProduct,
+    });
   } catch (error) {
-    await cleanupUploadedFiles(req.files);
+    await deleteCloudinaryImages(uploadedAssets);
+
     console.error('Error updating product:', error);
-    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Internal server error' });
+
+    return res.status(error.statusCode || 500).json({
+      error: error.statusCode
+        ? error.message
+        : 'Internal server error',
+    });
+  } finally {
+    await cleanupUploadedFiles(req.files || []);
   }
 });
+
 
 // 8. DELETE A PRODUCT. Historical transactions are retained; a listing with
 // any transaction record cannot be deleted. The conditional delete also races
