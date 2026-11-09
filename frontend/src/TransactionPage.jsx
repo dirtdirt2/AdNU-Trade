@@ -375,14 +375,6 @@ export default function TransactionPage() {
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       <Navbar query={query} setQuery={setQuery} onNav={home} />
       <main className="mx-auto max-w-[1250px] space-y-5 px-4 pb-28 pt-8 sm:px-8 lg:pb-12">
-        {/* Temporary Debug Box */}
-        <div className="bg-slate-900 text-emerald-400 p-3 rounded-xl text-xs font-mono space-y-1 shadow-md">
-          <p>Logged-in User ID: {currentUserId || "None"}</p>
-          <p>Resolved Buyer Name: <span className="text-white font-bold">{buyerName}</span></p>
-          <p>Transaction Seller ID: {sellerId || "None"}</p>
-          <p>Is Seller? <span className={isSeller ? "text-emerald-300 font-bold" : "text-red-400 font-bold"}>{String(isSeller)}</span></p>
-          <p>Meetup Status: {m.meetupStatus}</p>
-        </div>
 
         <TransactionHeader id={displayCode || txId} onRefresh={fetchTransactionDetails} />
         <TransactionStatus status={status} />
