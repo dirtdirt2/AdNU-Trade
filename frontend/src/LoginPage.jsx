@@ -277,13 +277,28 @@ export default function LoginPage() {
                 Sign In as Administrator
               </button>
             </form>
-
             <p className="mt-7 text-center text-sm text-slate-500">
               Don't have an account?{" "}
               <a href="#/register" className="font-semibold hover:underline" style={link}>
                 Create an account
               </a>
             </p>
+
+            <div className="mt-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-200" />
+              <span className="text-xs font-medium text-slate-400">OR</span>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = "#/home";
+              }}
+              className="mt-5 flex h-12 w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-[15px] font-semibold text-slate-700 shadow-sm transition duration-200 hover:border-[#2b47a3] hover:bg-slate-50 hover:text-[#2b47a3] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#2b47a3]/20"
+            >
+              Continue as Guest
+            </button>
           </>
         )}
 

@@ -34,8 +34,8 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// Optional authentication remains available for non-sensitive routes.
-// The marketplace routes now use verifyToken because AdNU Trade is school-only.
+// Optional authentication allows guests to access public marketplace routes.
+// Protected actions must continue to use verifyToken.
 const optionalVerifyToken = (req, _res, next) => {
   const authHeader = req.headers.authorization;
   const [scheme, token] = typeof authHeader === 'string' ? authHeader.split(' ') : [];

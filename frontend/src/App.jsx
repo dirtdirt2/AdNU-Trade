@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import LoginPage from "./LoginPage.jsx";
 import RegisterPage from "./RegisterPage.jsx";
@@ -8,25 +9,44 @@ import ProfilePage from "./ProfilePage.jsx";
 import AdminPage from "./AdminPage.jsx";
 import NotificationsPage from "./NotificationsPage.jsx";
 
+const getInitialRoute = () => {
+  const hash = window.location.hash;
+  return !hash || hash === "#/" ? "#/home" : hash;
+};
+
 export default function App() {
-  const [route, setRoute] = useState(window.location.hash || "#/");
+  const [route, setRoute] = useState(getInitialRoute);
 
   useEffect(() => {
-    // Auto-redirect to home ONLY if token exists
-    const rememberedToken = localStorage.getItem("token") || sessionStorage.getItem("token");
-    if (rememberedToken && (window.location.hash === "" || window.location.hash === "#/")) {
-      window.location.hash = "#/home";
-    }
-
     const onChange = () => {
-      const currentHash = window.location.hash || "#/";
-      const protectedRoutes = ["#/home", "#/listings", "#/saved", "#/transactions", "#/transaction", "#/profile", "#/admin", "#/notifications"];
-      const isProtectedRoute = protectedRoutes.includes(currentHash) || currentHash.startsWith("#/messages");
+      const currentHash = window.location.hash || "#/home";
 
-      // Auth guard for manual URL typing
-      const hasToken = !!localStorage.getItem("token") || !!sessionStorage.getItem("token");
+      // The app root now opens the public marketplace.
+      if (currentHash === "#/") {
+        window.location.hash = "#/home";
+        return;
+      }
+
+      const protectedRoutes = [
+        "#/listings",
+        "#/saved",
+        "#/transactions",
+        "#/transaction",
+        "#/profile",
+        "#/admin",
+        "#/notifications",
+      ];
+
+      const isProtectedRoute =
+        protectedRoutes.includes(currentHash) ||
+        currentHash.startsWith("#/messages");
+
+      const hasToken =
+        !!localStorage.getItem("token") ||
+        !!sessionStorage.getItem("token");
+
       if (isProtectedRoute && !hasToken) {
-        window.location.hash = "#/";
+        window.location.hash = "#/login";
         return;
       }
 
@@ -40,19 +60,35 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
 
-  if (route === "#/register") {
-    return <RegisterPage onSwitchToLogin={() => { window.location.hash = "#/"; }} />;
+  if (route === "#/login") {
+    return <LoginPage />;
   }
 
-  // Render routes based on hash
-  if (route === "#/home" || route === "#/listings" || route === "#/saved" || route === "#/transactions") {
+  if (route === "#/register") {
+    return (
+      <RegisterPage
+        onSwitchToLogin={() => {
+          window.location.hash = "#/login";
+        }}
+      />
+    );
+  }
+
+  if (
+    route === "#/home" ||
+    route === "#/listings" ||
+    route === "#/saved" ||
+    route === "#/transactions"
+  ) {
     return <HomePage />;
   }
+
   if (route === "#/transaction") return <TransactionPage />;
   if (route.startsWith("#/messages")) return <MessagesPage />;
   if (route === "#/profile") return <ProfilePage />;
   if (route === "#/notifications") return <NotificationsPage />;
   if (route === "#/admin") return <AdminPage />;
 
-  return <LoginPage />;
+  // Unknown routes return visitors to the public marketplace.
+  return <HomePage />;
 }
