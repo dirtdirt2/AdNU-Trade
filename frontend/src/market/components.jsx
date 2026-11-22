@@ -28,6 +28,30 @@ export const CatIcon = ({ category, size = 44 }) => {
 const soft = { color: NAVY_LIGHT, background: "#2b47a30f" };
 const ring = "focus:outline-none focus-visible:ring-4 focus-visible:ring-[#2b47a3]/20";
 
+function useIsAuthenticated() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() =>
+    Boolean(localStorage.getItem("token") || sessionStorage.getItem("token"))
+  );
+
+  useEffect(() => {
+    const updateAuth = () => {
+      setIsAuthenticated(
+        Boolean(localStorage.getItem("token") || sessionStorage.getItem("token"))
+      );
+    };
+
+    window.addEventListener("adnu-auth-changed", updateAuth);
+    window.addEventListener("storage", updateAuth);
+
+    return () => {
+      window.removeEventListener("adnu-auth-changed", updateAuth);
+      window.removeEventListener("storage", updateAuth);
+    };
+  }, []);
+
+  return isAuthenticated;
+}
+
 export function BrandMark() {
   return (
     <a href="#/home" className="flex items-center gap-2.5" aria-label="ADNU Trade">
@@ -54,48 +78,63 @@ export function SearchBar({ query, setQuery }) {
   );
 }
 
+
 export function Navbar({ query, setQuery, onNav, profileActive = false, msgActive = false, notificationActive = false }) {
+  const isAuthenticated = useIsAuthenticated();
   const [menu, setMenu] = useState(false);
   const [messageUnread, setMessageUnread] = useState(0);
   const [notificationUnread, setNotificationUnread] = useState(0);
 
-  // Badges are driven by the authenticated user's actual unread records.
-  // Counts refresh periodically and immediately after private inbox changes.
   useEffect(() => {
     let active = true;
+
     const refreshUnreadCounts = async () => {
       const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+
       if (!token) {
-        if (active) { setMessageUnread(0); setNotificationUnread(0); }
+        if (active) {
+          setMessageUnread(0);
+          setNotificationUnread(0);
+        }
         return;
       }
+
       const headers = { Authorization: `Bearer ${token}` };
+
       const [messageResult, notificationResult] = await Promise.allSettled([
         fetch(apiUrl("/api/messages/unread-count"), { headers, cache: "no-store" }),
         fetch(apiUrl("/api/notifications/unread-count"), { headers, cache: "no-store" }),
       ]);
+
       if (!active) return;
+
       if (messageResult.status === "fulfilled" && messageResult.value.ok) {
         const data = await messageResult.value.json().catch(() => ({}));
-        setMessageUnread(Number.isFinite(Number(data.count)) ? Number(data.count) : 0);
+        setMessageUnread(Number(data.count) || 0);
       } else {
         setMessageUnread(0);
       }
+
       if (notificationResult.status === "fulfilled" && notificationResult.value.ok) {
         const data = await notificationResult.value.json().catch(() => ({}));
-        setNotificationUnread(Number.isFinite(Number(data.count)) ? Number(data.count) : 0);
+        setNotificationUnread(Number(data.count) || 0);
       } else {
         setNotificationUnread(0);
       }
     };
 
     refreshUnreadCounts();
+
     const interval = window.setInterval(refreshUnreadCounts, 15000);
     const refreshOnFocus = () => refreshUnreadCounts();
-    const refreshOnVisibility = () => { if (document.visibilityState === "visible") refreshUnreadCounts(); };
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === "visible") refreshUnreadCounts();
+    };
+
     window.addEventListener("focus", refreshOnFocus);
     window.addEventListener("adnu-unread-counts-changed", refreshOnFocus);
     document.addEventListener("visibilitychange", refreshOnVisibility);
+
     return () => {
       active = false;
       window.clearInterval(interval);
@@ -105,58 +144,143 @@ export function Navbar({ query, setQuery, onNav, profileActive = false, msgActiv
     };
   }, []);
 
-  // Resolve account role and display name from the signed-in session.
   const tokenPayload = readTokenPayload() || {};
   const isAdmin = tokenPayload.role === "admin";
   const tokenName = (tokenPayload.fullName || tokenPayload.name || "").trim();
   const displayName = tokenName.split(/\s+/)[0] || profileStore.first || "Account";
 
   const Icon = ({ icon: I, label, count = 0, active, onClick }) => (
-    <button onClick={onClick} aria-label={count ? `${label}, ${count} unread` : label} aria-current={active ? "page" : undefined}
+    <button
+      onClick={onClick}
+      aria-label={count ? `${label}, ${count} unread` : label}
+      aria-current={active ? "page" : undefined}
       className={`relative hidden h-10 w-10 items-center justify-center rounded-xl transition sm:flex ${active ? "" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"} ${ring}`}
-      style={active ? soft : undefined}>
+      style={active ? soft : undefined}
+    >
       <I size={20} />
-      {count > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">{count > 99 ? "99+" : count}</span>}
+      {count > 0 && (
+        <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
     </button>
   );
+
   const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50";
+
   return (
     <header className="sticky top-0 z-30 w-full shrink-0 border-b border-slate-200/70 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-[68px] max-w-[1500px] sm:h-20 items-center gap-3 px-4 sm:px-6">
-        <div className="shrink-0 lg:w-52"><BrandMark /></div>
+      <div className="mx-auto flex h-[68px] max-w-[1500px] items-center gap-3 px-4 sm:h-20 sm:px-6">
+        <div className="shrink-0 lg:w-52">
+          <BrandMark />
+        </div>
+
         <SearchBar query={query} setQuery={setQuery} />
-        <div className="ml-auto flex items-center gap-1">
-          <Icon icon={MessageCircle} label="Messages" count={messageUnread} active={msgActive} onClick={() => onNav("messages")} />
-          <Icon icon={Bell} label="Notifications" count={notificationUnread} active={notificationActive} onClick={() => onNav("notifications")} />
-          <div className="relative">
-            <button onClick={() => setMenu((m) => !m)} aria-expanded={menu} style={profileActive ? soft : undefined} className={`flex items-center gap-2 rounded-xl p-1.5 pr-2 transition hover:bg-slate-100 ${ring}`}>
-              <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-sm font-semibold" style={soft}>{displayName[0]?.toUpperCase() || 'A'}</span>
-              <span className="hidden text-sm font-medium text-slate-700 md:block">{displayName}</span>
-              <ChevronDown size={16} className={`text-slate-400 transition ${menu ? "rotate-180" : ""}`} />
-            </button>
-            {menu && (
-              <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_10px_40px_-12px_rgba(22,41,107,0.25)]" onClick={() => setMenu(false)}>
-                <button className={item} onClick={() => onNav("profile")}><User size={16} /> Profile</button>
-                {isAdmin && (
-                  <button className={item} onClick={() => { window.location.hash = "#/admin"; }}>
-                    <LayoutDashboard size={16} /> Switch to Admin Dashboard
-                  </button>
+
+        <div className="ml-auto flex items-center gap-2">
+          {isAuthenticated ? (
+            <>
+              <Icon
+                icon={MessageCircle}
+                label="Messages"
+                count={messageUnread}
+                active={msgActive}
+                onClick={() => onNav("messages")}
+              />
+
+              <Icon
+                icon={Bell}
+                label="Notifications"
+                count={notificationUnread}
+                active={notificationActive}
+                onClick={() => onNav("notifications")}
+              />
+
+              <div className="relative">
+                <button
+                  onClick={() => setMenu((m) => !m)}
+                  aria-expanded={menu}
+                  style={profileActive ? soft : undefined}
+                  className={`flex items-center gap-2 rounded-xl p-1.5 pr-2 transition hover:bg-slate-100 ${ring}`}
+                >
+                  <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-sm font-semibold" style={soft}>
+                    {displayName[0]?.toUpperCase() || "A"}
+                  </span>
+
+                  <span className="hidden text-sm font-medium text-slate-700 md:block">
+                    {displayName}
+                  </span>
+
+                  <ChevronDown size={16} className={`text-slate-400 transition ${menu ? "rotate-180" : ""}`} />
+                </button>
+
+                {menu && (
+                  <div
+                    className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_10px_40px_-12px_rgba(22,41,107,0.25)]"
+                    onClick={() => setMenu(false)}
+                  >
+                    <button className={item} onClick={() => onNav("profile")}>
+                      <User size={16} /> Profile
+                    </button>
+
+                    {isAdmin && (
+                      <button className={item} onClick={() => { window.location.hash = "#/admin"; }}>
+                        <LayoutDashboard size={16} /> Switch to Admin Dashboard
+                      </button>
+                    )}
+
+                    <a
+                      href="#/home"
+                      className={item}
+                      onClick={() => {
+                        localStorage.removeItem("token");
+                        sessionStorage.removeItem("token");
+                        localStorage.removeItem("role");
+                        window.dispatchEvent(new Event("adnu-auth-changed"));
+                      }}
+                    >
+                      <LogOut size={16} /> Sign out
+                    </a>
+                  </div>
                 )}
-                <a href="#/" className={item} onClick={() => { localStorage.removeItem('token'); sessionStorage.removeItem('token'); }}><LogOut size={16} /> Sign out</a>
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <>
+              <a
+                href="#/login"
+                className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Log in
+              </a>
+
+              <a
+                href="#/register"
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                style={{ background: NAVY_LIGHT }}
+              >
+                Register
+              </a>
+            </>
+          )}
         </div>
       </div>
     </header>
   );
 }
 
+
 export function Sidebar({ view, onNav }) {
+  const isAuthenticated = useIsAuthenticated();
+
+  const visibleNav = isAuthenticated
+    ? NAV
+    : NAV.filter(({ id }) => id === "home");
+
   return (
     <aside className="sticky top-20 hidden h-[calc(100vh-5rem)] w-60 shrink-0 flex-col border-r border-slate-200/70 bg-white/60 p-4 lg:flex">
       <nav className="space-y-1" aria-label="Main">
-        {NAV.map(({ id, label, icon: I }) => {
+        {visibleNav.map(({ id, label, icon: I }) => {
           const on = view === id;
           return (
             <button key={id} onClick={() => onNav(id)} aria-current={on ? "page" : undefined}
@@ -177,21 +301,43 @@ export function Sidebar({ view, onNav }) {
   );
 }
 
+
 export function BottomNav({ view, onNav }) {
+  const isAuthenticated = useIsAuthenticated();
+
+  const visibleNav = isAuthenticated
+    ? NAV
+    : NAV.filter(({ id }) => id === "home");
+
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="Main">
-      {NAV.map(({ id, label, icon: I }) => {
+    <nav
+      className={`fixed inset-x-0 bottom-0 z-30 grid ${
+        isAuthenticated ? "grid-cols-6" : "grid-cols-1"
+      } border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden`}
+      aria-label="Main"
+    >
+      {visibleNav.map(({ id, label, icon: I }) => {
         const on = view === id;
+
         return (
-          <button key={id} onClick={() => onNav(id)} aria-current={on ? "page" : undefined}
-            className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] ${on ? "font-semibold" : "text-slate-500"}`} style={on ? { color: NAVY_LIGHT } : undefined}>
-            <I size={20} /> {label.replace("My ", "")}
+          <button
+            key={id}
+            onClick={() => onNav(id)}
+            aria-current={on ? "page" : undefined}
+            className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] ${
+              on ? "font-semibold" : "text-slate-500"
+            }`}
+            style={on ? { color: NAVY_LIGHT } : undefined}
+          >
+            <I size={20} />
+            {label.replace("My ", "")}
           </button>
         );
       })}
     </nav>
   );
 }
+
 
 export function CategoryFilter({ category, setCategory }) {
   return (
