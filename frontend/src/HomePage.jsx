@@ -78,7 +78,30 @@ export default function HomePage() {
   const [paymentForm, setPaymentForm] = useState({ walletProvider: "", senderName: "", referenceNumber: "", proof: null });
   const [paymentError, setPaymentError] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const currentUserId = getCurrentUserId();
+  const [guestPrompt, setGuestPrompt] = useState("");
+  const [currentUserId, setCurrentUserId] = useState(getCurrentUserId);
+
+  useEffect(() => {
+    const refreshAuth = () => {
+      setCurrentUserId(getCurrentUserId());
+    };
+
+    window.addEventListener("adnu-auth-changed", refreshAuth);
+    window.addEventListener("storage", refreshAuth);
+
+    return () => {
+      window.removeEventListener("adnu-auth-changed", refreshAuth);
+      window.removeEventListener("storage", refreshAuth);
+    };
+  }, []);
+
+  const isAuthenticated = Boolean(currentUserId);
+
+  const requireAuth = (action) => {
+    if (isAuthenticated) return true;
+    setGuestPrompt(action);
+    return false;
+  };
 
   useEffect(() => { store.open = null; }, []);
   useEffect(() => { store.favs = favs; }, [favs]);
@@ -184,6 +207,8 @@ export default function HomePage() {
   }, [view, category]);
 
   const toggleFav = async (id) => {
+    if (!requireAuth("save items to your account")) return;
+
     const wasSaved = favs.has(id);
     const previous = favs;
     const next = new Set(favs);
@@ -243,6 +268,8 @@ export default function HomePage() {
 
   // Update URL hash when navigating tabs
   const go = (v) => {
+    if (v !== "home" && !requireAuth("access your account")) return;
+
     window.location.hash = `#/${v}`;
     setShowFilter(false);
   };
@@ -382,7 +409,9 @@ export default function HomePage() {
                 <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
                 <p className="mt-1.5 text-sm text-slate-500">{sub}</p>
               </div>
-              <button onClick={() => setSell(true)} style={{ background: NAVY_LIGHT }}
+              <button onClick={() => {
+                if (requireAuth("sell an item")) setSell(true);
+              }} style={{ background: NAVY_LIGHT }}
                 className="flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-semibold text-white shadow-md shadow-[#2b47a3]/25 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#2b47a3]/30">
                 <Plus size={18} /> Sell an Item
               </button>
@@ -490,8 +519,14 @@ export default function HomePage() {
           item={selected}
           fav={favs.has(selected.id)}
           onFav={() => toggleFav(selected.id)}
-          onMessage={(item, mode) => { setSelected(null); setChat({ item, mode }); }}
+          onMessage={(item, mode) => {
+            if (!requireAuth(mode === "offer" ? "make an offer" : "message the seller")) return;
+            setSelected(null);
+            setChat({ item, mode });
+          }}
           onBuy={(i) => {
+            if (!requireAuth("buy this item")) return;
+
             localStorage.removeItem('adnu_active_txId');
             store.tx = i;
             store.txId = null;
@@ -504,10 +539,60 @@ export default function HomePage() {
       )}
       {chat && <MessageSeller item={chat.item} mode={chat.mode} onBack={() => { setSelected(chat.item); setChat(null); }} onClose={() => setChat(null)} />}
 
+      {guestPrompt && (
+        <Modal onClose={() => setGuestPrompt("")}>
+          <div className="p-6 sm:p-7">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-900">
+              <User size={24} />
+            </div>
+
+            <h2 className="text-xl font-semibold text-slate-900">
+              Join AdNU Trade!
+            </h2>
+
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              Sign in or create an account to {guestPrompt}.
+              You can continue browsing the marketplace without an account.
+            </p>
+
+            <div className="mt-6 space-y-3">
+              <button
+                onClick={() => {
+                  setGuestPrompt("");
+                  window.location.hash = "#/login";
+                }}
+                className="h-11 w-full rounded-xl bg-blue-900 font-semibold text-white transition hover:bg-blue-800"
+              >
+                Log in
+              </button>
+
+              <button
+                onClick={() => {
+                  setGuestPrompt("");
+                  window.location.hash = "#/register";
+                }}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Create an account
+              </button>
+
+              <button
+                onClick={() => setGuestPrompt("")}
+                className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
+              >
+                Continue browsing
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {sell && (
         <SellModal
           onClose={() => setSell(false)}
           onAdd={async (formData) => {
+            if (!requireAuth("sell an item")) return;
+
             try {
               const token = localStorage.getItem('token') || sessionStorage.getItem('token');
               const res = await fetch(apiUrl("/api/products"), {

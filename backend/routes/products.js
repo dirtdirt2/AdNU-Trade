@@ -3,7 +3,7 @@ const fs = require('fs');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, optionalVerifyToken } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { validateUploadedImages, cleanupUploadedFiles } = require('../middleware/upload');
 const path = require('path');
@@ -144,7 +144,7 @@ router.post('/', verifyToken, upload.array('images', 5), async (req, res) => {
 
 
 // 2. GET ALL PUBLIC / APPROVED PRODUCTS (Marketplace Browsing)
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', optionalVerifyToken, async (req, res) => {
   try {
     const products = await prisma.product.findMany({
       where: {
@@ -392,7 +392,7 @@ router.post('/:id/fee-response', verifyToken, async (req, res) => {
 });
 
 // GET A SINGLE PRODUCT BY ID (For Product Detail Page)
-router.get('/:id', verifyToken, async (req, res) => {
+router.get('/:id', optionalVerifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const product = await prisma.product.findUnique({
